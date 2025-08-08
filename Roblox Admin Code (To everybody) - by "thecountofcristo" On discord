@@ -1,0 +1,241 @@
+local function splitWords(input)
+	local words = {}
+	for word in string.gmatch(input, "%S+") do
+		table.insert(words, word)
+	end
+	return words
+end
+
+game.Players.PlayerAdded:Connect(function(Plr)
+	Plr.Chatted:Connect(function(Msg)
+		--->> Dissect the message into parts <<---
+		local SplitMsg = splitWords(Msg)
+		local Cmd = SplitMsg[1]
+		if Cmd and Cmd:sub(1, 1) ~= "/" then
+			return
+		end
+		Cmd = string.lower(Cmd)
+		local plr = SplitMsg[2]
+		local Power = SplitMsg[3]
+		if Power == nil then
+			if plr ~= nil then
+				Power = plr
+			else
+				Power = "1"
+			end
+			plr = Plr
+		else
+			local IsAPlayer = false
+			for i,v in pairs(game.Players:GetChildren()) do
+				if v.Name == plr then
+					IsAPlayer = true
+					plr = v
+					break
+				end
+			end
+			if not IsAPlayer then
+				return
+			end
+		end
+		Power = tonumber(Power) or 1
+		if Power == 0 then 
+			Power = 1 
+		end
+		
+		-- Now, we have the Command (Cmd), the Player affected (plr), and the Power (Power).
+
+		local Char = plr.Character
+
+		--->> Commands <<---
+		if plr:IsA("Player") then
+			if not Char or not Char:FindFirstChild("Humanoid") then
+				return
+			end
+			if Cmd == "/ban" then
+				if Plr ~= plr then -- You cant ban yourself
+					local banConfig = {
+						UserIds = {plr.UserId},
+						Duration = Power,
+						DisplayReason = "You violated community guidelines.",
+						PrivateReason = "Inappropriate behavior detected.",
+						ApplyToUniverse = true,
+						ExcludeAltAccounts = false
+					}
+
+					if SplitMsg[4] then -- Give the ability to add ban reasons but if not provided there are defaults
+						banConfig.DisplayReason = SplitMsg[4]
+						if SplitMsg[5] then
+							banConfig.PrivateReason = SplitMsg[5]
+						else
+							banConfig.PrivateReason = SplitMsg[4]
+						end
+					end
+
+					local success, errorMessage = pcall(function()
+						return game:GetService("Players"):BanAsync(banConfig) -- Actually banning the the player
+					end)
+
+					if not success then
+						warn("Failed to ban player:", errorMessage)
+					end
+				end
+			elseif Cmd == "/unban" then
+				local config = {
+					UserIds = {plr.UserId},
+					ApplyToUniverse = true,
+				}
+
+				local success, err = pcall(function()
+					game:GetService("Players"):UnbanAsync(config) -- Unbaning the player
+				end)
+
+				if not success then
+					warn("Failed to unban ".. plr.Name )
+				end
+			elseif Cmd == "/kick" then
+				local Msg
+				if SplitMsg[4] then -- Allows for special kick messages if provided
+					Msg = SplitMsg[4]
+				else
+					Msg = "You have been removed from this experience."
+				end
+				plr:Kick(Msg) -- Kicking the player
+			elseif Cmd == "/explode" then
+				if Char:FindFirstChild("Humanoid").Health == 0 then -- Waiting for the character to load back in if it isnt (I wont be specifying this for the rest of the code)
+					plr.CharacterAdded:Wait()
+					task.wait(.25)
+					Char = plr.Character
+				end
+				local explosion = Instance.new("Explosion") -- Explode the player
+				explosion.Position = Char.HumanoidRootPart.Position
+				explosion.Parent = Char.HumanoidRootPart
+				explosion.BlastRadius = Power
+				task.wait(.5)
+				explosion:Destroy()
+			elseif Cmd == "/kill" then
+				if Char:FindFirstChild("Humanoid").Health == 0 then 
+					plr.CharacterAdded:Wait()
+					task.wait(.25)
+					Char = plr.Character
+				end
+				Char:FindFirstChild("Humanoid").Health = 0 -- Setting the players health to 0 to kill them
+			elseif Cmd == "/fling" then
+				local function attachmentCreater(name, parent, offset) -- Creates attachments for the fling
+					local parentCFrame = parent.CFrame
+
+					local att = Instance.new("Attachment")
+					att.Parent = parent
+					att.Name = name
+
+					att.WorldCFrame = parentCFrame * offset
+
+					return att
+				end
+
+				local function fling(char, humanoid, humanoidRootPart) -- Actually fling the player
+					local lookVector = humanoidRootPart.CFrame.LookVector
+					local upVector = humanoidRootPart.CFrame.UpVector
+
+					local timeFlinging = tick()
+
+					local flingDirection = lookVector * Power + upVector * Power
+
+					humanoid.PlatformStand = true
+
+					local bv = Instance.new("BodyVelocity") -- This launches the player
+					bv.Parent = humanoidRootPart
+					bv.P = 1750
+					bv.MaxForce = Vector3.new(9e9,9e9,9e9)
+					bv.Velocity = flingDirection
+
+					game.Debris:AddItem(bv,0.1)
+
+					local av = Instance.new("AngularVelocity") -- This makes the player spin
+					av.Parent = humanoidRootPart
+					av.MaxTorque = 10000
+					av.ReactionTorqueEnabled = false
+
+					local att1 = attachmentCreater("att1", humanoidRootPart, CFrame.new(0,0,0))
+					local att2 = attachmentCreater("att2", humanoidRootPart, CFrame.new(0,0,0))
+
+					game.Debris:AddItem(att1,.1)
+					game.Debris:AddItem(att2,.1)
+
+					game.Debris:AddItem(av,.1)
+
+					av.Attachment0 = att1
+					av.Attachment1 = att2
+
+					av.AngularVelocity = Vector3.new(math.random(-Power,Power),math.random(-Power,Power),math.random(-Power,Power))
+
+					task.wait(5)
+
+					humanoid.PlatformStand = false
+				end
+				if Char:FindFirstChild("Humanoid").Health == 0 then
+					plr.CharacterAdded:Wait()
+					task.wait(.25)
+					Char = plr.Character
+				end
+				fling(Char, Char:FindFirstChild("Humanoid"), Char:FindFirstChild("HumanoidRootPart"))
+			elseif Cmd == "/walkspeed" then
+				if Char:FindFirstChild("Humanoid").Health == 0 then
+					plr.CharacterAdded:Wait()
+					task.wait(.25)
+					Char = plr.Character
+				end
+				Char:FindFirstChild("Humanoid").WalkSpeed = Power -- Changes the players walkspeed
+			elseif Cmd == "/jumpheight" then
+				if Char:FindFirstChild("Humanoid").Health == 0 then
+					plr.CharacterAdded:Wait()
+					task.wait(.25)
+					Char = plr.Character
+				end
+				if Char:FindFirstChild("Humanoid").UseJumpPower then -- Checks if we needa to use JumpPower or JumpHeight and then changes it
+					Char:FindFirstChild("Humanoid").JumpPower = Power
+				else
+					Char:FindFirstChild("Humanoid").JumpHeight = Power
+				end
+			elseif Cmd == "/invisible" then
+				if Char:FindFirstChild("Humanoid").Health == 0 then
+					plr.CharacterAdded:Wait()
+					task.wait(.25)
+					Char = plr.Character
+				end
+				for i,v in pairs(Char:GetDescendants()) do -- Goes through the whole player
+					if v:IsA("MeshPart") or v:IsA("Decal") then -- if its a mesh part (This is everything im turning invisible - the already invisible HRP) and a decal (like a face)
+						v.Transparency = 1
+					elseif v:IsA("ParticleEmitter") then -- Turns off particles coming from items like some of roblox's items (not sure if UGC content can have particle emitters yet)
+						v.Enabled = false
+					end
+				end
+				if Power > 1 then
+					task.wait(Power) -- Waits the durration and then makes them visible again
+					if Char:FindFirstChild("Humanoid").Health == 0 then
+						return -- If the player has died then they will regen normal so i dont need to run this code anymore
+					end
+					for i,v in pairs(Char:GetDescendants()) do -- Makes the player visible again
+						if v:IsA("MeshPart") or v:IsA("Decal") then
+							v.Transparency = 0
+						elseif v:IsA("ParticleEmitter") then
+							v.Enabled = true
+						end
+					end
+				end
+			elseif Cmd == "/visible" then
+				if Char:FindFirstChild("Humanoid").Health == 0 then
+					plr.CharacterAdded:Wait()
+					task.wait(.25)
+					Char = plr.Character
+				end
+				for i,v in pairs(Char:GetDescendants()) do -- makes the player visible again
+					if v:IsA("MeshPart") or v:IsA("Decal") then
+						v.Transparency = 0
+					elseif v:IsA("ParticleEmitter") then
+						v.Enabled = true
+					end
+				end
+			end
+		end
+	end)
+end)
